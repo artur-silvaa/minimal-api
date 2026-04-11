@@ -1,3 +1,4 @@
+
 using MinimalApi.Infraestrutura.Db;
 using MinimalApi.DTO;
 using Microsoft.EntityFrameworkCore;
@@ -17,7 +18,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 using System.Net;
 using MinimalApi;
-using Microsoft.OpenApi; // Único using necessário para o Swagger agora
+using Microsoft.OpenApi;
 
 namespace MinimalApi;
 
@@ -62,26 +63,25 @@ public class Startup
         services.AddEndpointsApiExplorer();
 
         services.AddSwaggerGen(options =>
-   {
-       // 1. Define como o Token deve ser passado (Cadeado na UI)
-       options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-       {
-           Name = "Authorization",
-           Type = SecuritySchemeType.Http,
-           Scheme = "bearer",
-           BearerFormat = "JWT",
-           In = ParameterLocation.Header,
-           Description = "Insira APENAS o token JWT abaixo."
-       });
+        {
+            // 1. Define como o Token deve ser passado (Cadeado na UI)
+            options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+            {
+                Name = "Authorization",
+                Type = SecuritySchemeType.Http,
+                Scheme = "bearer",
+                BearerFormat = "JWT",
+                In = ParameterLocation.Header,
+                Description = "Insira APENAS o token JWT abaixo."
+            });
 
-       // 2. Exige o token em todos os endpoints que possuem [Authorize]
-       options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
-       {
-           [new OpenApiSecuritySchemeReference("Bearer", document)] = new List<string>()
-       });
-   });
+            // 2. Exige o token em todos os endpoints que possuem [Authorize]
+            options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+            {
+                [new OpenApiSecuritySchemeReference("Bearer", document)] = new List<string>()
+            });
+        });
 
-        // O AddDbContext precisa ficar AQUI, DENTRO do método ConfigureServices
         services.AddDbContext<DbContexto>(options =>
         {
             options.UseMySql(
@@ -90,7 +90,7 @@ public class Startup
             );
         });
 
-    } // ESTA É A CHAVE QUE FECHA O MÉTODO ConfigureServices
+    }
 
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
     {
@@ -228,6 +228,105 @@ public class Startup
             .RequireAuthorization(new AuthorizeAttribute { Roles = "Adm" })
             .WithTags("Administradores");
             #endregion
+
+            #region Veiculos
+            ErrosDeValidacao validaDTO(VeiculoDTO veiculoDTO)
+            {
+                var validacao = new ErrosDeValidacao
+                {
+                    Mensagens = new List<string>()
+                };
+
+                if (string.IsNullOrEmpty(veiculoDTO.Nome))
+                    validacao.Mensagens.Add("O nome não pode ser vazio");
+
+                if (string.IsNullOrEmpty(veiculoDTO.Marca))
+                    validacao.Mensagens.Add("A marca não pode ficar em branco");
+
+                if (veiculoDTO.Ano < 1950)
+                    validacao.Mensagens.Add("Veículo muito antigo, aceito somente anos superiores a 1950");
+
+                return validacao;
+            }
+
+            endpoint.MapPost("/veiculos", ([FromBody] VeiculoDTO veiculoDTO, IVeiculoServico veiculoServico) =>
+            {
+                var validacao = validaDTO(veiculoDTO);
+                if (validacao.Mensagens.Count > 0)
+                    return Results.BadRequest(validacao);
+
+                var veiculo = new Veiculo
+                {
+                    Nome = veiculoDTO.Nome,
+                    Marca = veiculoDTO.Marca,
+                    Ano = veiculoDTO.Ano
+                };
+                veiculoServico.Incluir(veiculo);
+
+                return Results.Created($"/veiculo/{veiculo.Id}", veiculo);
+
+            }).RequireAuthorization()
+            .RequireAuthorization(new AuthorizeAttribute { Roles = "Adm, Editor" })
+            .WithTags("Veiculos");
+
+            endpoint.MapGet("/veiculos", ([FromQuery] int? pagina, IVeiculoServico veiculoServico) =>
+            {
+                var veiculos = veiculoServico.Todos(pagina);
+                return Results.Ok(veiculos);
+            })
+            .RequireAuthorization()
+            .RequireAuthorization(new AuthorizeAttribute { Roles = "Adm, Editor" })
+            .WithTags("Veiculos");
+
+            endpoint.MapGet("/veiculos/{id}", ([FromRoute] int id, IVeiculoServico veiculoServico) =>
+            {
+                var veiculo = veiculoServico.BuscaPorId(id);
+
+                if (veiculo == null) return Results.NotFound();
+
+                return Results.Ok(veiculo);
+            })
+            .RequireAuthorization()
+            .RequireAuthorization(new AuthorizeAttribute { Roles = "Adm, Editor" })
+            .WithTags("Veiculos");
+
+            endpoint.MapPut("/veiculos/{id}", ([FromRoute] int id, VeiculoDTO veiculoDTO, IVeiculoServico veiculoServico) =>
+            {
+                var veiculo = veiculoServico.BuscaPorId(id);
+                if (veiculo == null) return Results.NotFound();
+
+                var validacao = validaDTO(veiculoDTO);
+                if (validacao.Mensagens.Count > 0)
+                    return Results.BadRequest(validacao);
+
+                veiculo.Nome = veiculoDTO.Nome;
+                veiculo.Marca = veiculoDTO.Marca;
+                veiculo.Ano = veiculoDTO.Ano;
+
+                veiculoServico.Atualizar(veiculo);
+
+                return Results.Ok(veiculo);
+
+            }).RequireAuthorization()
+            .RequireAuthorization(new AuthorizeAttribute { Roles = "Adm" })
+            .WithTags("Veiculos");
+
+            endpoint.MapDelete("/veiculos/{id}", ([FromRoute] int id, IVeiculoServico veiculoServico) =>
+            {
+                var veiculo = veiculoServico.BuscaPorId(id);
+
+                if (veiculo == null) return Results.NotFound();
+
+                veiculoServico.Apagar(veiculo);
+
+                return Results.NoContent();
+
+            }).RequireAuthorization()
+            .RequireAuthorization(new AuthorizeAttribute { Roles = "Adm" })
+            .WithTags("Veiculos");
+            #endregion
+
         });
     }
 }
+

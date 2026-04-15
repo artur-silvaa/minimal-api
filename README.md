@@ -69,9 +69,3 @@ A topologia de infraestrutura da aplicação está hospedada na Amazon Web Servi
 
 Desenvolvido por **Artur Silva** - Full Stack Developer & UI/UX Designer.  
 Fique à vontade para contribuir abrindo *Issues* ou enviando *Pull Requests*!
-
-os.makedirs('output', exist_ok=True)
-filepath = 'output/README.md'
-
-with open(filepath, 'w', encoding='utf-8') as f:
-    f.write(content)
